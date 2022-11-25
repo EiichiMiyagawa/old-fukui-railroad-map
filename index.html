@@ -1,0 +1,158 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>旧福井鉄道マップ</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.1.0/ol.css">
+<script src="https://cdn.jsdelivr.net/npm/ol@v7.1.0/dist/ol.js"></script>
+</head><body>
+<h1 id=title></h1>
+<span>
+  <input type="checkbox" id="show-old-map"></input>
+  <label for="show-old-map">過去の地図を表示する</label>
+  <input type="button" id="seiho" value="鯖浦線へ"/>
+  <input type="button" id="nanetsu" value="南越線へ"/>
+</span>
+<div id="olmap" style="width:auto;height:600px;"></div>
+<div id="popup" class="ol-popup">
+  <div id="popup-content"></div>
+</div>
+
+<script type="module">
+  import { OLMap } from "https://eiichimiyagawa.github.io/OLMap/v1/OLMap.js";
+  import { CSV } from "https://js.sabae.cc/CSV.js";
+
+  // iOS14以前に関する対応（top-level await未対応のため）
+  onload = async() => {
+    const addMarker = (layer, params = {}) => {
+      const feature = new ol.Feature({
+        geometry: new ol.geom.Point(ol.proj.transform([params["longitude"], params["latitude"]], "EPSG:4326","EPSG:3857")),
+        content: params["content"] || ""
+      });
+      feature.setStyle(new ol.style.Style({
+        image: new ol.style.Icon({
+          anchor: [0.5, 0.5],
+          anchorXUnits: "fraction",
+          anchorYUnits: "fraction",
+          src: params["icon"] || "./v1/icon.png"
+        })
+      }));
+      layer.getSource().addFeature(feature);
+    };
+
+    const onChangeShowOldMapCheckBox = (event) => {
+      const opacity = event.target.checked ? 1.0 : 0.0;
+      const layer = map.getLayer("old");
+      layer.setOpacity(opacity);
+    };
+
+    title.textContent = document.title;
+
+    const map = new OLMap({
+      tileUrl: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",
+      zoom: 17,
+      minZoom: 14,
+      maxZoom: 17
+    });
+
+    map.addTileLayer("old", "https://cyberjapandata.gsi.go.jp/xyz/ort_old10/{z}/{x}/{y}.png");
+    const oldLayer = map.getLayer("old");
+    oldLayer.setOpacity(0);
+
+    // 線路データ
+    map.map.addLayer(new ol.layer.Vector({
+      source: new ol.source.Vector({
+        url: "./gsi20221125025454295.geojson",
+        format: new ol.format.GeoJSON(),
+        projection: "EPSG:3857"
+      }),
+      properties: {
+        id: "railroad"
+      },
+      style : new ol.style.Style({
+        stroke: new ol.style.Stroke({
+          color: 'rgba(0, 255, 0, 0.5)',
+          width: 8
+        }),
+      })
+    }));
+
+    // 駅データ
+    const data = await CSV.fetch("./鯖浦線.csv");
+    const stations = await CSV.toJSON(data);
+    const data2 = await CSV.fetch("./南越線.csv");
+    const stations2 = await CSV.toJSON(data2);
+    const seihoCoordinate = map.transform(stations[0]["経度"], stations[0]["緯度"]);
+    const nanetsuCoordinate = map.transform(stations2[0]["経度"], stations2[0]["緯度"]);
+
+    map.addVectorLayer("marker");
+    const layer = map.getLayer("marker");
+
+    stations.concat(stations2).forEach((station) => {
+      addMarker(layer, {
+        longitude: Number(station["経度"]),
+        latitude: Number(station["緯度"]),
+        content: `<p>${station["名前"]}</p><p>${station["読み方"]}</p>`,
+        icon: "./image/icon.png"
+      });
+    });
+
+    const showOldMapCheckBoxElement = document.getElementById("show-old-map");
+    showOldMapCheckBoxElement.onchange = onChangeShowOldMapCheckBox;
+
+    const onClickSeihoButton = (event) => {
+      map.setCenter(seihoCoordinate);
+    };
+    const seihoButtonElement = document.getElementById("seiho");
+    seihoButtonElement.onclick = onClickSeihoButton;
+
+    const onClickNanetsuButton = (event) => {
+      map.setCenter(nanetsuCoordinate);
+    };
+    const nanetsuButtonElement = document.getElementById("nanetsu");
+    nanetsuButtonElement.onclick = onClickNanetsuButton;
+  }
+</script>
+
+<style>
+  body {
+    text-align: center;
+    font-family: sans-serif;
+  }
+
+  textarea {
+    width: 70vw;
+    height: 8em;
+  }
+
+  .ol-popup {
+    position: absolute;
+    background-color: white;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #cccccc;
+    bottom: 12px;
+    left: -50px;
+    min-width: 280px;
+  }
+  .ol-popup:after, .ol-popup:before {
+    top: 100%;
+    border: solid transparent;
+    content: " ";
+    height: 0;
+    width: 0;
+    position: absolute;
+    pointer-events: none;
+  }
+  .ol-popup:after {
+    border-top-color: white;
+    border-width: 10px;
+    left: 48px;
+    margin-left: -10px;
+  }
+  .ol-popup:before {
+    border-top-color: #cccccc;
+    border-width: 11px;
+    left: 48px;
+    margin-left: -11px;
+  }
+</style>
+
